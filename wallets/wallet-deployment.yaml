@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wallet-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: wallet-service
+  template:
+    metadata:
+      labels:
+        app: wallet-service
+    spec:
+      containers:
+        - name: wallet
+          image: wallet-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080  # Wallet service runs on 8080 inside the container
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: wallet-service
+spec:
+  selector:
+    app: wallet-service
+  ports:
+    - protocol: TCP
+      port: 8082  # Exposes externally on 8082
+      targetPort: 8080  # Maps to container's 8080
+  type: ClusterIP
