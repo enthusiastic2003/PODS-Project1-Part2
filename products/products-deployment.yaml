@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: marketplace-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: marketplace-service
+  template:
+    metadata:
+      labels:
+        app: marketplace-service
+    spec:
+      containers:
+        - name: marketplace-service
+          image: marketplace-service:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080  # Assuming the product service runs on 8083
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: marketplace-service
+spec:
+  selector:
+    app: marketplace-service
+  ports:
+    - protocol: TCP
+      port: 8081  # Exposed within the cluster
+      targetPort: 8080  # Maps to the container's port
+  type: ClusterIP
