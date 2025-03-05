@@ -1,0 +1,35 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: h2db
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: h2db
+  template:
+    metadata:
+      labels:
+        app: h2db
+    spec:
+      containers:
+        - name: h2db
+          image: h2db:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 9082
+          resources:
+            requests:
+              cpu: 100m # Customize these as needed
+              memory: 256Mi
+            limits:
+              cpu: 200m
+              memory: 512Mi
+          env: # Add environment variables if needed
+            - name: DB_HOST
+              value: h2db-service # Assuming you create a Service for H2
+
+      terminationGracePeriodSeconds: 30
+      dnsPolicy: ClusterFirst
+      securityContext: {}
+      schedulerName: default-scheduler

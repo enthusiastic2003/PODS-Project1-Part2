@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: h2db-service
+spec:
+  selector:
+    app: h2db # Adjust label if needed
+  type: ClusterIP # Internal visibility only
+  ports:
+    - name: web-console
+      port: 9081    # Web console port
+      targetPort: 9081
+    - name: tcp-db
+      port: 9082    # TCP connections
+      targetPort: 9082
