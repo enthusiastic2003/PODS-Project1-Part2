@@ -2,6 +2,7 @@ package com.sirjanhansda.pods.wallets.controller;
 
 import com.sirjanhansda.pods.wallets.model.UsrWallet;
 import com.sirjanhansda.pods.wallets.walletdb.WalletDb;
+import jakarta.transaction.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -42,6 +43,8 @@ public class WalletRouter {
      * @param walletRequest The request containing action (credit/debit) and amount
      * @return ResponseEntity containing updated wallet details or error message
      */
+
+    @Transactional
     @PutMapping("/{userId}")
     public ResponseEntity<?> updateWallet(
             @PathVariable Integer userId,
@@ -134,10 +137,10 @@ public class WalletRouter {
      */
     private String processTransaction(UsrWallet wallet, WalletPUTRequest request) {
         if (request.action == WalletPUTRequest.Action.debit) {
-            if (wallet.getBalance() < request.amount) {
-                return "Insufficient funds";
+            int updatedRows = walletDb.debitIfSufficient(wallet.getUser_id(), request.amount);
+            if (updatedRows == 0) {
+                return "Insufficient funds";  // Prevents race condition
             }
-            wallet.setBalance(wallet.getBalance() - request.amount);
         } else if (request.action == WalletPUTRequest.Action.credit) {
             if (wallet.getBalance() > Integer.MAX_VALUE - request.amount) {
                 return "Amount too large";

@@ -62,6 +62,7 @@ public class OrdersRouter {
      *
      * @param prodPOSTRequest Order request containing user ID and items
      * @return ResponseEntity with created order or error message
+     * TODO: Allow concurrency for multiple users
      */
     @PostMapping
     public ResponseEntity<?> takeOrder(@RequestBody ProdPOSTRequest prodPOSTRequest) {
@@ -158,6 +159,7 @@ public class OrdersRouter {
      * @param orderId Order ID to update
      * @param orderPUTStatus New status information
      * @return ResponseEntity with success/failure message
+     * TODO: Allow concurrency for multiple users
      */
     @PutMapping("/{orderId}")
     public ResponseEntity<?> setOrderStatus(@PathVariable Integer orderId, 
