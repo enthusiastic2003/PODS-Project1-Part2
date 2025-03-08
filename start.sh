@@ -17,7 +17,7 @@ kubectl apply -f ./wallets/wallet-deployment.yaml \
               -f ./h2_database/h2db-service.yaml
 
 # Restart all deployments
-kubectl rollout restart deployment
+# kubectl rollout restart deployment
 
 echo "WAIT FOR 20 SECONDS BEFORE STARTING PORT FORWARDING"
 sleep 20
@@ -48,4 +48,5 @@ for port in "${!PORT_SERVICE_MAP[@]}"; do
     echo "  - ${PORT_SERVICE_MAP[$port]} -> $port"
 done
 echo "PLEASE ENTER YOUR PASSWORD TO START MINIKUBE TUNNEL. KEEP THIS TERMINAL OPEN. RUN TESTS IN A NEW TERMINAL. PRESS CTRL+C TO STOP MINIKUBE TUNNEL. RUN TEARDOWN.SH TO STOP PORT FORWARDING."
+echo "If it doesnt work, please try first stopping this terminal with ctrl+c. Then running 'minikube tunnel' , then try tests in another terminal."
 minikube tunnel
