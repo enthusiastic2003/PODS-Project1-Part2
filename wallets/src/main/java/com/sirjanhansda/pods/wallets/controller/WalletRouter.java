@@ -51,17 +51,18 @@ public class WalletRouter {
             @RequestBody WalletPUTRequest walletRequest) {
 
         // Get or create wallet
-        UsrWallet userWallet = getOrCreateWallet(userId);
+        getOrCreateWallet(userId);
 
         try {
             // Process the transaction
-            String errorMessage = processTransaction(userWallet, walletRequest);
+            String errorMessage = processTransaction(userId, walletRequest);
             if (errorMessage != null) {
                 return ResponseEntity.badRequest().body(errorMessage);
             }
 
             // Save and return updated wallet
-            UsrWallet savedWallet = walletDb.save(userWallet);
+            List<UsrWallet> savedList = walletDb.findUsrWalletByUser_id(userId);
+            UsrWallet savedWallet = savedList.get(0);
             return ResponseEntity.ok(savedWallet);
 
         } catch (Exception e) {
@@ -115,37 +116,36 @@ public class WalletRouter {
      * @param userId The unique identifier of the user
      * @return UsrWallet object (either existing or newly created)
      */
-    private UsrWallet getOrCreateWallet(Integer userId) {
+    private void getOrCreateWallet(Integer userId) {
         List<UsrWallet> userWallets = walletDb.findUsrWalletByUser_id(userId);
 
         if (userWallets.isEmpty()) {
             UsrWallet newWallet = new UsrWallet();
             newWallet.setUser_id(userId);
             newWallet.setBalance(0);
-            return newWallet;
+            walletDb.save(newWallet);
         }
 
-        return userWallets.get(0);
     }
 
     /**
      * Helper method to process credit/debit transactions.
      *
-     * @param wallet The wallet to process transaction for
+     * @param usrId The wallet to process transaction for
      * @param request The transaction request details
      * @return Error message if transaction invalid, null if successful
      */
-    private String processTransaction(UsrWallet wallet, WalletPUTRequest request) {
+    private String processTransaction(Integer usrId, WalletPUTRequest request) {
         if (request.action == WalletPUTRequest.Action.debit) {
-            int updatedRows = walletDb.debitIfSufficient(wallet.getUser_id(), request.amount);
+            int updatedRows = walletDb.debitIfSufficient(usrId, request.amount);
             if (updatedRows == 0) {
                 return "Insufficient funds";  // Prevents race condition
             }
         } else if (request.action == WalletPUTRequest.Action.credit) {
-            if (wallet.getBalance() > Integer.MAX_VALUE - request.amount) {
-                return "Amount too large";
+            int updatedRows = walletDb.creditAmount(usrId, request.amount);
+            if (updatedRows == 0) {
+                return "Failed to update balance , amount = " + request.amount + " user id = "+ usrId;
             }
-            wallet.setBalance(wallet.getBalance() + request.amount);
         }
         return null;
     }

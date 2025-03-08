@@ -23,6 +23,9 @@ public interface WalletDb extends JpaRepository<UsrWallet, Integer>{
     @Query("UPDATE UsrWallet uw SET uw.balance = uw.balance - :amount WHERE uw.user_id = :userid AND uw.balance >= :amount")
     int debitIfSufficient(@Param("userid") Integer userid, @Param("amount") Integer amount);
 
+    @Modifying
+    @Query("UPDATE UsrWallet uw SET uw.balance = uw.balance + :amount WHERE uw.user_id = :userid")
+    int creditAmount(@Param("userid") Integer userid, @Param("amount") Integer amount);
 
-    
+
 }   

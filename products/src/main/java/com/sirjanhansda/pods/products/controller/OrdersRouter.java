@@ -12,9 +12,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
+import java.util.*;
 
 /**
  * OrdersRouter handles all order-related operations in the system.
@@ -64,64 +62,85 @@ public class OrdersRouter {
      * @return ResponseEntity with created order or error message
      * TODO: Allow concurrency for multiple users
      */
+    @Transactional
     @PostMapping
     public ResponseEntity<?> takeOrder(@RequestBody ProdPOSTRequest prodPOSTRequest) {
         Integer userId = prodPOSTRequest.getUser_id();
 
         // Step 1: Verify user exists and get their details
-        ResponseEntity<Customer> customerResponse = getCustomerDetails(userId);
-        if (!customerResponse.getStatusCode().is2xxSuccessful()) {
-            System.out.println("Cannot get user");
-            return ResponseEntity.badRequest().body(customerResponse);
-        }
-
-        // Step 2: Validate quantities in order
-        for(ItemFormat item: prodPOSTRequest.getItems()) {
-            if(item.getQuantity() <= 0) {
-                return ResponseEntity.badRequest().body("Quantity should be greater than 0");
+        synchronized (userId.toString().intern()) {
+            ResponseEntity<Customer> customerResponse = getCustomerDetails(userId);
+            if (!customerResponse.getStatusCode().is2xxSuccessful()) {
+                System.out.println("Cannot get user");
+                return ResponseEntity.badRequest().body(customerResponse);
             }
+
+            // Step 2: Validate quantities in order
+            for (ItemFormat item : prodPOSTRequest.getItems()) {
+                if (item.getQuantity() <= 0) {
+                    return ResponseEntity.badRequest().body("Quantity should be greater than 0");
+                }
+            }
+
+            // Step 3: Calculate total cost including any applicable discounts
+            double totalCost = calculateTotalCost(prodPOSTRequest, customerResponse.getBody());
+            if (totalCost < 0) {
+                return ResponseEntity.badRequest().body("Product not found or stock insufficient");
+            }
+
+            // Step 4: Check user's wallet balance
+            ResponseEntity<UsrWallet> walletResponse = getWalletDetails(userId);
+            if (!walletResponse.getStatusCode().is2xxSuccessful()) {
+                return ResponseEntity.badRequest().body(walletResponse);
+            }
+
+            UsrWallet usrWallet = walletResponse.getBody();
+            if (usrWallet.getBalance() < totalCost) {
+                return ResponseEntity.badRequest().body("Not enough money");
+            }
+
+            // Step 5: Process payment by debiting wallet
+            boolean debitSuccess = debitAmountFromWallet(userId, totalCost);
+            if (!debitSuccess) {
+                return ResponseEntity.badRequest().body("Failed to process payment");
+            }
+
+            // Step 6: Update product stock levels
+            Map<Integer, Integer> deductedStocks = new HashMap<>();
+
+            for (ItemFormat item : prodPOSTRequest.getItems()) {
+                int updatedRows = prodDb.decrementStock(item.getProduct_id(), item.getQuantity());
+                if (updatedRows == 0) {
+                    // Rollback stock & refund wallet
+                    rollbackStock(deductedStocks);
+                    refundAmountToWallet(userId, totalCost);
+                    return ResponseEntity.badRequest().body("Stock insufficient for product " + item.getProduct_id());
+                }
+                deductedStocks.put(item.getProduct_id(), item.getQuantity()); // Store deducted stock for rollback
+            }
+
+
+            // Step 7: Update customer's discount status
+            boolean discountUpdated = updateDiscountStatus(prodPOSTRequest,
+                    Objects.requireNonNull(customerResponse.getBody()));
+            if (!discountUpdated) {
+                return ResponseEntity.badRequest().body("Failed to update discount status");
+            }
+
+            // Step 8: Create and save the order
+            Orders ord = createOrder(prodPOSTRequest, userId, totalCost);
+
+            return ResponseEntity.status(HttpStatus.CREATED).body(ord);
         }
+    }
 
-        // Step 3: Calculate total cost including any applicable discounts
-        double totalCost = calculateTotalCost(prodPOSTRequest, customerResponse.getBody());
-        if (totalCost < 0) {
-            return ResponseEntity.badRequest().body("Product not found or stock insufficient");
+    @Transactional
+    public void rollbackStock(Map<Integer, Integer> deductedStocks) {
+        for (Map.Entry<Integer, Integer> entry : deductedStocks.entrySet()) {
+            Integer productId = entry.getKey();
+            Integer quantity = entry.getValue();
+            prodDb.incrementStock(productId, quantity);
         }
-
-        // Step 4: Check user's wallet balance
-        ResponseEntity<UsrWallet> walletResponse = getWalletDetails(userId);
-        if (!walletResponse.getStatusCode().is2xxSuccessful()) {
-            return ResponseEntity.badRequest().body(walletResponse);
-        }
-
-        UsrWallet usrWallet = walletResponse.getBody();
-        if (usrWallet.getBalance() < totalCost) {
-            return ResponseEntity.badRequest().body("Not enough money");
-        }
-
-        // Step 5: Process payment by debiting wallet
-        boolean debitSuccess = debitAmountFromWallet(userId, totalCost);
-        if (!debitSuccess) {
-            return ResponseEntity.badRequest().body("Failed to process payment");
-        }
-
-        // Step 6: Update product stock levels
-        boolean stockUpdated = updateStockLevels(prodPOSTRequest);
-        if (!stockUpdated) {
-            return ResponseEntity.badRequest().body("Failed to update stock levels");
-        }
-
-        // Step 7: Update customer's discount status
-        boolean discountUpdated = updateDiscountStatus(prodPOSTRequest, 
-            Objects.requireNonNull(customerResponse.getBody()));
-        if (!discountUpdated) {
-            return ResponseEntity.badRequest().body("Failed to update discount status");
-        }
-
-        // Step 8: Create and save the order
-        Orders ord = createOrder(prodPOSTRequest, userId, totalCost);
-
-        return ResponseEntity.status(HttpStatus.CREATED).body(ord);
     }
 
     /**
@@ -159,7 +178,6 @@ public class OrdersRouter {
      * @param orderId Order ID to update
      * @param orderPUTStatus New status information
      * @return ResponseEntity with success/failure message
-     * TODO: Allow concurrency for multiple users
      */
     @PutMapping("/{orderId}")
     public ResponseEntity<?> setOrderStatus(@PathVariable Integer orderId, 
@@ -396,24 +414,29 @@ public class OrdersRouter {
         }
     }
 
-    /**
-     * Updates product stock levels after successful order.
-     *
-     * @param prodPOSTRequest Order request containing items
-     * @return boolean indicating success/failure
-     */
-    private boolean updateStockLevels(ProdPOSTRequest prodPOSTRequest) {
-        for (ItemFormat item : prodPOSTRequest.getItems()) {
-            List<Product> products = prodDb.findProductById(item.getProduct_id());
-            Product product = products.get(0);
-            product.setStock_quantity(product.getStock_quantity() - item.getQuantity());
-            prodDb.save(product);
+    private boolean refundAmountToWallet(Integer userId, double amount) {
+        try {
+            String url = walletServiceUrl + "/wallets/" + userId;
+
+            WalletPUTRequest request = new WalletPUTRequest();
+            request.setAction(WalletPUTRequest.Action.credit); // Use "credit" action
+            request.setAmount((int) amount);
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+
+            HttpEntity<WalletPUTRequest> entity = new HttpEntity<>(request, headers);
+            restTemplate.exchange(url, HttpMethod.PUT, entity, String.class);
+            return true;
+        } catch (Exception e) {
+            System.out.println("Wallet refund failed: " + e.getMessage());
+            return false;
         }
-        return true;
     }
 
 
-/**
+
+    /**
      * Updates the discount status for a customer after they use their discount.
      * This method is called after a successful order placement where a discount was applied.
      * It communicates with the account service to mark the customer's discount as used.

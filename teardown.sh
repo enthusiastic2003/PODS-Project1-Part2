@@ -1,7 +1,5 @@
 #!/bin/bash
 
-kubectl rollout restart deployment
-
 # Define ports and their corresponding services
 declare -A PORT_SERVICE_MAP
 PORT_SERVICE_MAP["8080"]="service/user-service"
@@ -21,21 +19,13 @@ kill_existing() {
     done
 }
 
-# Function to restart port-forwarding with correct mapping
-restart_port_forward() {
-    for port in "${!PORT_SERVICE_MAP[@]}"; do
-        service="${PORT_SERVICE_MAP[$port]}"
-        echo "Starting port-forward on $service at port $port..."
-        kubectl port-forward "$service" $port:$port &  # Run in background
-        sleep 1  # Give some time for each port-forward to start
-    done
-}
-
-# Execute functions
+# Execute function
 kill_existing
-restart_port_forward
 
-echo "Port forwarding restarted for:"
-for port in "${!PORT_SERVICE_MAP[@]}"; do
-    echo "  - ${PORT_SERVICE_MAP[$port]} -> $port"
-done
+kubectl delete pods --all --grace-period=0 --force &
+
+sleep 3
+
+kubectl delete deployment --all
+
+echo "All existing port-forwarding processes have been stopped."

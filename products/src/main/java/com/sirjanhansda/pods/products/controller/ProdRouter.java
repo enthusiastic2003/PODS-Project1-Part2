@@ -26,7 +26,7 @@ import java.util.List;
  */
 @RestController
 @RequestMapping("/products")
-public class ProdRouter {
+public class    ProdRouter {
 
     // Injecting the ProdDb service to handle database interactions
     @Autowired

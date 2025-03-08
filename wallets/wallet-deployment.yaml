@@ -30,4 +30,4 @@ spec:
     - protocol: TCP
       port: 8082  # Exposes externally on 8082
       targetPort: 8080  # Maps to container's 8080
-  type: ClusterIP
+  type: LoadBalancer
