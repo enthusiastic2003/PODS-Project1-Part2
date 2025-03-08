@@ -1,5 +1,14 @@
 #!/bin/bash
 
+minikube start
+
+eval $(minikube docker-env)
+
+docker build --no-cache -t marketplace-service ./products
+docker build --no-cache -t wallet-service ./wallets
+docker build --no-cache -t user-service ./user 
+docker build --no-cache -t h2db ./h2_database
+
 # Apply Kubernetes configurations
 kubectl apply -f ./wallets/wallet-deployment.yaml \
               -f ./user/user-deployment.yaml \
@@ -10,7 +19,8 @@ kubectl apply -f ./wallets/wallet-deployment.yaml \
 # Restart all deployments
 kubectl rollout restart deployment
 
-sleep 5
+echo "WAIT FOR 20 SECONDS BEFORE STARTING PORT FORWARDING"
+sleep 20
 
 # Define ports and their corresponding services
 declare -A PORT_SERVICE_MAP
@@ -37,3 +47,5 @@ echo "Port forwarding started for:"
 for port in "${!PORT_SERVICE_MAP[@]}"; do
     echo "  - ${PORT_SERVICE_MAP[$port]} -> $port"
 done
+echo "PLEASE ENTER YOUR PASSWORD TO START MINIKUBE TUNNEL. KEEP THIS TERMINAL OPEN. RUN TESTS IN A NEW TERMINAL. PRESS CTRL+C TO STOP MINIKUBE TUNNEL. RUN TEARDOWN.SH TO STOP PORT FORWARDING."
+minikube tunnel

@@ -29,3 +29,24 @@ sleep 3
 kubectl delete deployment --all
 
 echo "All existing port-forwarding processes have been stopped."
+
+eval $(minikube docker-env)
+
+docker ps -a --filter "ancestor=user-service" -q | xargs docker rm -f
+docker ps -a --filter "ancestor=wallet-service" -q | xargs docker rm -f
+docker ps -a --filter "ancestor=marketplace-service" -q | xargs docker rm -f
+docker ps -a --filter "ancestor=h2db" -q | xargs docker rm -f
+
+
+docker images user-service -q | xargs docker rmi
+docker images wallet-service -q | xargs docker rmi
+docker images marketplace-service -q | xargs docker rmi
+docker images h2db -q | xargs docker rmi
+
+echo "All existing images have been removed."
+
+minikube stop
+
+echo "Minikube has been stopped."
+
+echo "PLEASE WAIT ATLEAST 1 MINUTE BEFORE RUNNING START.SH"

@@ -1,5 +1,8 @@
 import requests
 from http.client import responses
+# Add current directory to imports to avoid "ModuleNotFoundError"
+import sys
+sys.path.append("concurrent_test_cases")
 from colorama import Fore, Style
 
 def print_request(method, url, args = {}):
